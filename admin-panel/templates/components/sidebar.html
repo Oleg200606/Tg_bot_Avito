@@ -1,0 +1,53 @@
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <div class="logo">
+            <div class="logo-icon">
+                <i class="fas fa-robot"></i>
+            </div>
+            <span>Admin Panel</span>
+        </div>
+    </div>
+
+    <nav class="nav">
+        <div class="nav-item active" onclick="showSection('dashboard')">
+            <i class="fas fa-chart-line"></i>
+            <span>Дашборд</span>
+        </div>
+        <div class="nav-item" onclick="showSection('users')">
+            <i class="fas fa-users"></i>
+            <span>Пользователи</span>
+        </div>
+        <div class="nav-item" onclick="showSection('subscriptions')">
+            <i class="fas fa-crown"></i>
+            <span>Подписки</span>
+        </div>
+        <div class="nav-item" onclick="showSection('instructions')">
+            <i class="fas fa-book"></i>
+            <span>Инструкции</span>
+        </div>
+        <div class="nav-item" onclick="showSection('settings')">
+            <i class="fas fa-cog"></i>
+            <span>Настройки</span>
+        </div>
+        <div class="nav-item" onclick="showSection('system')">
+            <i class="fas fa-server"></i>
+            <span>Система</span>
+        </div>
+    </nav>
+
+    <div class="sidebar-footer">
+        <div class="user-info">
+            <div class="user-avatar">
+                <i class="fas fa-user-shield"></i>
+            </div>
+            <div class="user-details">
+                <h4 id="admin-name">Администратор</h4>
+                <span id="admin-role">Супер админ</span>
+            </div>
+        </div>
+        <button class="logout-btn" onclick="logout()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Выйти</span>
+        </button>
+    </div>
+</aside>

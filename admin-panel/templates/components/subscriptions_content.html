@@ -1,0 +1,53 @@
+<!-- Subscriptions Stats -->
+<div class="stats-grid mb-3">
+    <div class="stat-card">
+        <div class="stat-value" id="total-subscriptions">0</div>
+        <div class="stat-label">Всего подписок</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="active-subscriptions">0</div>
+        <div class="stat-label">Активных</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="expired-subscriptions">0</div>
+        <div class="stat-label">Истекших</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="avg-duration">0 дн.</div>
+        <div class="stat-label">Средняя длительность</div>
+    </div>
+</div>
+
+<!-- Subscriptions Table -->
+<div class="content-card">
+    <div class="card-header">
+        <h2>Список подписок</h2>
+        <div class="card-actions">
+            <select id="subscription-filter" class="form-control" onchange="loadSubscriptions()">
+                <option value="active">Активные</option>
+                <option value="expired">Истекшие</option>
+                <option value="all">Все</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-container">
+        <table id="subscriptions-table">
+            <thead>
+                <tr>
+                    <th>Пользователь</th>
+                    <th>Тариф</th>
+                    <th>Начало</th>
+                    <th>Окончание</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="subscriptions-table-body">
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Загрузка подписок...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination" id="subscriptions-pagination" style="margin-top: 20px;"></div>
+</div>

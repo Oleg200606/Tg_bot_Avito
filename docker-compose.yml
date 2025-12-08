@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: avito_bot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - bot-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: 1
+      DB_NAME: avito_bot
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bot-network
+    restart: unless-stopped
+
+  admin-panel:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: 1
+      DB_NAME: avito_bot
+      SECRET_KEY: ${SECRET_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5002:5000"
+    networks:
+      - bot-network
+    restart: unless-stopped
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
