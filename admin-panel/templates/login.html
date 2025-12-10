@@ -1,63 +1,49 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark">
+<html lang="ru">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход в админ-панель | Бот подписок</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Вход в админ-панель</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .login-container {
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background: var(--bg-primary);
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
         }
 
         .login-card {
-            background: var(--bg-card);
-            border-radius: 12px;
+            background: var(--dark);
+            border: 1px solid var(--border);
+            border-radius: 10px;
             padding: 40px;
             width: 100%;
             max-width: 400px;
-            border: 1px solid var(--border);
-            box-shadow: 0 8px 24px var(--shadow);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
 
-        .login-header {
+        .login-logo {
             text-align: center;
             margin-bottom: 30px;
         }
 
-        .login-logo {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 20px;
+        .login-logo i {
+            font-size: 48px;
+            color: var(--primary);
+            margin-bottom: 15px;
         }
 
-        .login-logo-icon {
-            width: 48px;
-            height: 48px;
-            background: var(--accent);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .login-logo h1 {
             font-size: 24px;
-        }
-
-        .login-title {
-            font-size: 24px;
-            font-weight: 700;
             margin-bottom: 5px;
         }
 
-        .login-subtitle {
-            color: var(--text-secondary);
+        .login-logo p {
+            color: var(--secondary);
             font-size: 14px;
         }
 
@@ -65,57 +51,42 @@
             margin-bottom: 20px;
         }
 
-        .login-form .form-label {
+        .login-form label {
             display: block;
             margin-bottom: 8px;
-            font-weight: 500;
-        }
-
-        .login-form .form-control {
-            width: 100%;
-            padding: 12px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-primary);
+            color: var(--secondary);
             font-size: 14px;
         }
 
-        .login-form .form-control:focus {
+        .login-form input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--light);
+            font-size: 14px;
+        }
+
+        .login-form input:focus {
             outline: none;
-            border-color: var(--accent);
-        }
-
-        .password-container {
-            position: relative;
-        }
-
-        .password-toggle {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
+            border-color: var(--primary);
         }
 
         .login-button {
             width: 100%;
             padding: 12px;
-            background: var(--accent);
+            background: var(--primary);
             color: white;
             border: none;
             border-radius: 6px;
-            font-weight: 500;
-            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
             transition: background 0.2s;
         }
 
         .login-button:hover {
-            background: var(--accent-hover);
+            background: var(--primary-dark);
         }
 
         .login-button:disabled {
@@ -123,44 +94,15 @@
             cursor: not-allowed;
         }
 
-        .login-footer {
-            text-align: center;
-            margin-top: 20px;
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
-
-        .alert {
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-
-        .alert-error {
+        .error-message {
             background: rgba(239, 68, 68, 0.1);
             border: 1px solid var(--danger);
             color: var(--danger);
-        }
-
-        .alert-success {
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid var(--success);
-            color: var(--success);
-        }
-
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-        }
-
-        @media (max-width: 480px) {
-            .login-card {
-                padding: 30px 20px;
-                margin: 20px;
-            }
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-size: 14px;
+            display: none;
         }
     </style>
 </head>
@@ -168,170 +110,92 @@
 <body>
     <div class="login-container">
         <div class="login-card">
-            <div class="login-header">
-                <div class="login-logo">
-                    <div class="login-logo-icon">
-                        <i class="fas fa-robot"></i>
-                    </div>
-                </div>
-                <div class="login-title">Админ-панель</div>
-                <div class="login-subtitle">Бот подписок Avito</div>
+            <div class="login-logo">
+                <i class="fas fa-robot"></i>
+                <h1>Админ-панель</h1>
+                <p>Управление ботом подписок</p>
             </div>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category if category != 'error' else 'error' }}">
-                {{ message }}
-            </div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-
-            <form id="loginForm" class="login-form" onsubmit="return login(event)">
+            <form id="loginForm" class="login-form">
                 <div class="form-group">
-                    <label class="form-label">Имя пользователя</label>
-                    <input type="text" id="username" name="username" class="form-control" required
-                        placeholder="Введите имя пользователя">
+                    <label>Имя пользователя</label>
+                    <input type="text" id="username" placeholder="Введите имя пользователя" required>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Пароль</label>
-                    <div class="password-container">
-                        <input type="password" id="password" name="password" class="form-control" required
-                            placeholder="Введите пароль">
-                        <button type="button" class="password-toggle" onclick="togglePassword()">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
+                    <label>Пароль</label>
+                    <input type="password" id="password" placeholder="Введите пароль" required>
                 </div>
 
                 <button type="submit" class="login-button" id="loginButton">
                     <span id="loginText">Войти</span>
-                    <span id="loginLoading" class="loading" style="display: none;">
-                        <div class="spinner" style="width: 16px; height: 16px;"></div>
-                        Вход...
-                    </span>
+                    <div id="loginSpinner" class="spinner"
+                        style="display: none; width: 20px; height: 20px; margin: 0 auto;"></div>
                 </button>
-            </form>
 
-            <div class="login-footer">
-                <p>Только для администраторов системы</p>
-            </div>
+                <div id="errorMessage" class="error-message"></div>
+            </form>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script>
-        function togglePassword() {
-            const passwordInput = document.getElementById('password');
-            const toggleButton = document.querySelector('.password-toggle i');
-
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                toggleButton.className = 'fas fa-eye-slash';
-            } else {
-                passwordInput.type = 'password';
-                toggleButton.className = 'fas fa-eye';
-            }
-        }
-
-        async function login(event) {
-            event.preventDefault();
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
             const loginButton = document.getElementById('loginButton');
             const loginText = document.getElementById('loginText');
-            const loginLoading = document.getElementById('loginLoading');
+            const loginSpinner = document.getElementById('loginSpinner');
+            const errorMessage = document.getElementById('errorMessage');
 
             if (!username || !password) {
-                showNotification('Заполните все поля', 'error');
-                return false;
+                showError('Заполните все поля');
+                return;
             }
 
             // Показать индикатор загрузки
             loginText.style.display = 'none';
-            loginLoading.style.display = 'flex';
+            loginSpinner.style.display = 'block';
             loginButton.disabled = true;
+            errorMessage.style.display = 'none';
 
             try {
                 const formData = new FormData();
                 formData.append('username', username);
                 formData.append('password', password);
 
-                const response = await axios.post('/login', formData);
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    body: formData
+                });
 
-                if (response.data.success) {
-                    showNotification('Вход выполнен успешно', 'success');
-                    setTimeout(() => {
-                        window.location.href = response.data.redirect || '/';
-                    }, 1000);
+                const data = await response.json();
+
+                if (data.success) {
+                    window.location.href = data.redirect || '/';
                 } else {
-                    showNotification(response.data.error || 'Ошибка входа', 'error');
+                    showError(data.error || 'Ошибка входа');
                 }
             } catch (error) {
-                console.error('Login error:', error);
-                let message = 'Ошибка соединения';
-
-                if (error.response && error.response.data && error.response.data.error) {
-                    message = error.response.data.error;
-                } else if (error.message) {
-                    message = error.message;
-                }
-
-                showNotification(message, 'error');
+                showError('Ошибка соединения');
             } finally {
                 // Скрыть индикатор загрузки
                 loginText.style.display = 'block';
-                loginLoading.style.display = 'none';
+                loginSpinner.style.display = 'none';
                 loginButton.disabled = false;
-            }
-
-            return false;
-        }
-
-        function showNotification(message, type = 'info') {
-            // Удалить старые алерты
-            const oldAlerts = document.querySelectorAll('.alert');
-            oldAlerts.forEach(alert => alert.remove());
-
-            // Создать новый алерт
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            alertDiv.textContent = message;
-
-            // Вставить перед формой
-            const loginHeader = document.querySelector('.login-header');
-            loginHeader.parentNode.insertBefore(alertDiv, loginHeader.nextSibling);
-
-            // Автоматическое удаление через 5 секунд
-            if (type === 'error') {
-                setTimeout(() => {
-                    if (alertDiv.parentNode) {
-                        alertDiv.remove();
-                    }
-                }, 5000);
-            }
-        }
-
-        // Обработка нажатия Enter
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && !event.target.closest('button')) {
-                const loginButton = document.getElementById('loginButton');
-                if (!loginButton.disabled) {
-                    loginButton.click();
-                }
             }
         });
 
+        function showError(message) {
+            const errorElement = document.getElementById('errorMessage');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+
         // Фокус на поле ввода при загрузке
         document.addEventListener('DOMContentLoaded', () => {
-            const usernameInput = document.getElementById('username');
-            if (usernameInput) {
-                usernameInput.focus();
-            }
+            document.getElementById('username').focus();
         });
     </script>
 </body>

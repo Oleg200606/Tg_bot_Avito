@@ -1,0 +1,230 @@
+<!-- Модальное окно для создания подписки -->
+<div id="addSubscriptionModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Добавить подписку</h2>
+            <button class="close-btn" onclick="closeModal('addSubscriptionModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="addSubscriptionForm">
+                <div class="form-group">
+                    <label class="form-label">Пользователь *</label>
+                    <div class="search-container">
+                        <input type="text" id="subscription-user-search" class="form-control"
+                            placeholder="Начните вводить имя или Telegram ID..." oninput="searchUsers(this.value)">
+                        <div id="user-search-results" class="search-results"></div>
+                    </div>
+                    <input type="hidden" id="subscription-user-id">
+                    <div id="selected-user-info" class="selected-info" style="display: none;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Тарифный план *</label>
+                    <select id="subscription-plan" class="form-control" onchange="updateSubscriptionDays()">
+                        <option value="">Выберите тариф...</option>
+                        <!-- Заполнится через JS -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Длительность (дней) *</label>
+                    <input type="number" id="subscription-days" class="form-control" min="1" max="365" value="30"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Лимит запросов</label>
+                    <input type="number" id="subscription-request-limit" class="form-control" min="1" value="10">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Примечание</label>
+                    <textarea id="subscription-notes" class="form-control" rows="3"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" onclick="saveSubscription()">Создать подписку</button>
+            <button class="btn btn-secondary" onclick="closeModal('addSubscriptionModal')">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для продления подписки -->
+<div id="extendSubscriptionModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Продлить подписку</h2>
+            <button class="close-btn" onclick="closeModal('extendSubscriptionModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="extend-subscription-info"></div>
+            <div class="form-group">
+                <label class="form-label">Дней для продления *</label>
+                <input type="number" id="extend-days" class="form-control" min="1" max="365" value="30">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-success" onclick="confirmExtendSubscription()">Продлить</button>
+            <button class="btn btn-secondary" onclick="closeModal('extendSubscriptionModal')">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для редактирования подписки -->
+<div id="editSubscriptionModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Редактировать подписку</h2>
+            <button class="close-btn" onclick="closeModal('editSubscriptionModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editSubscriptionForm">
+                <div class="form-group">
+                    <label class="form-label">Тарифный план</label>
+                    <input type="text" id="edit-subscription-plan" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Лимит запросов</label>
+                    <input type="number" id="edit-subscription-request-limit" class="form-control" min="1">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Использовано запросов</label>
+                    <input type="number" id="edit-subscription-used-requests" class="form-control" min="0">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Статус</label>
+                    <select id="edit-subscription-status" class="form-control">
+                        <option value="true">Активна</option>
+                        <option value="false">Неактивна</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Примечание</label>
+                    <textarea id="edit-subscription-notes" class="form-control" rows="3"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" onclick="updateSubscription()">Сохранить</button>
+            <button class="btn btn-secondary" onclick="closeModal('editSubscriptionModal')">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для добавления тарифа -->
+<div id="addTariffModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Добавить тарифный план</h2>
+            <button class="close-btn" onclick="closeModal('addTariffModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="addTariffForm">
+                <div class="form-group">
+                    <label class="form-label">Название тарифа *</label>
+                    <input type="text" id="tariff-name" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Цена (руб) *</label>
+                    <input type="number" id="tariff-price" class="form-control" min="0" step="0.01" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Длительность (дней) *</label>
+                    <input type="number" id="tariff-duration" class="form-control" min="1" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Лимит запросов *</label>
+                    <input type="number" id="tariff-request-limit" class="form-control" min="1" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Описание</label>
+                    <textarea id="tariff-description" class="form-control" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="tariff-active" checked> Активный тариф
+                    </label>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" onclick="saveTariff()">Создать тариф</button>
+            <button class="btn btn-secondary" onclick="closeModal('addTariffModal')">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для редактирования тарифа -->
+<div id="editTariffModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Редактировать тарифный план</h2>
+            <button class="close-btn" onclick="closeModal('editTariffModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editTariffForm">
+                <div class="form-group">
+                    <label class="form-label">Название тарифа</label>
+                    <input type="text" id="edit-tariff-name" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Цена (руб)</label>
+                    <input type="number" id="edit-tariff-price" class="form-control" min="0" step="0.01">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Длительность (дней)</label>
+                    <input type="number" id="edit-tariff-duration" class="form-control" min="1">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Лимит запросов</label>
+                    <input type="number" id="edit-tariff-request-limit" class="form-control" min="1">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Описание</label>
+                    <textarea id="edit-tariff-description" class="form-control" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="edit-tariff-active"> Активный тариф
+                    </label>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" onclick="updateTariff()">Сохранить</button>
+            <button class="btn btn-secondary" onclick="closeModal('editTariffModal')">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения -->
+<div id="confirmModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="confirmModalTitle">Подтверждение</h2>
+            <button class="close-btn" onclick="closeModal('confirmModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="confirmModalMessage">Вы уверены?</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger" id="confirmModalYes">Да</button>
+            <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Отмена</button>
+        </div>
+    </div>
+</div>

@@ -1,120 +1,221 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark">
+<html lang="ru">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Админ-панель | Бот подписок</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Управление ботом</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
-    <div class="app-container">
-        {% include 'components/sidebar.html' %}
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <i class="fas fa-robot"></i>
+                <span>Bot Admin</span>
+            </div>
 
-        <main class="main-content">
+            <nav class="nav">
+                <a href="#dashboard" class="nav-item active" onclick="showSection('dashboard')">
+                    <i class="fas fa-home"></i>
+                    <span>Главная</span>
+                </a>
+                <a href="#users" class="nav-item" onclick="showSection('users')">
+                    <i class="fas fa-users"></i>
+                    <span>Пользователи</span>
+                </a>
+                <a href="#subscriptions" class="nav-item" onclick="showSection('subscriptions')">
+                    <i class="fas fa-crown"></i>
+                    <span>Подписки</span>
+                </a>
+                <a href="#bot" class="nav-item" onclick="showSection('bot')">
+                    <i class="fas fa-terminal"></i>
+                    <span>Управление ботом</span>
+                </a>
+            </nav>
+
+            <div class="user-info">
+                <div class="user-avatar">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <div class="user-details">
+                    <div id="admin-name">Администратор</div>
+                    <button onclick="logout()" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Выйти</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
             <!-- Dashboard Section -->
-            <div id="dashboard-section" style="display: none;">
-                {% include 'components/header.html' %}
-                <script>
-                    // Установка заголовка для дашборда
-                    document.querySelector('#dashboard-section .header h1').innerHTML =
-                        '<i class="fas fa-chart-line"></i> Дашборд';
-                </script>
+            <div id="dashboard-section" class="content-section">
+                <div class="header">
+                    <h1><i class="fas fa-chart-line"></i> Статистика</h1>
+                </div>
 
-                <!-- Stats Cards -->
-                {% include 'components/stat_cards.html' %}
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="total-users">0</div>
+                            <div class="stat-label">Всего пользователей</div>
+                        </div>
+                    </div>
 
-                <!-- Charts -->
-                {% include 'components/charts.html' %}
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-crown"></i>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="active-subs">0</div>
+                            <div class="stat-label">Активных подписок</div>
+                        </div>
+                    </div>
 
-                <!-- Recent Activity -->
-                {% include 'components/recent_activity.html' %}
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-ruble-sign"></i>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="today-revenue">0 ₽</div>
+                            <div class="stat-label">Выручка сегодня</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Users Section -->
-            <div id="users-section" style="display: none;">
-                {% include 'components/header.html' %}
-                <script>
-                    // Установка заголовка для пользователей
-                    document.querySelector('#users-section .header h1').innerHTML =
-                        '<i class="fas fa-users"></i> Пользователи';
-                </script>
+            <div id="users-section" class="content-section" style="display: none;">
+                <div class="header">
+                    <h1><i class="fas fa-users"></i> Пользователи</h1>
+                    <div class="header-actions">
+                        <input type="text" id="user-search" placeholder="Поиск пользователей..." class="search-input">
+                    </div>
+                </div>
 
-                <!-- Users Content -->
-                {% include 'components/users_content.html' %}
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Пользователь</th>
+                                <th>Telegram ID</th>
+                                <th>Подписка</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-table-body">
+                            <tr>
+                                <td colspan="5" class="text-center">Загрузка...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="users-pagination"></div>
             </div>
 
             <!-- Subscriptions Section -->
-            <div id="subscriptions-section" style="display: none;">
-                {% include 'components/header.html' %}
-                <script>
-                    // Установка заголовка для подписок
-                    document.querySelector('#subscriptions-section .header h1').innerHTML =
-                        '<i class="fas fa-crown"></i> Подписки';
-                </script>
+            <div id="subscriptions-section" class="content-section" style="display: none;">
+                <div class="header">
+                    <h1><i class="fas fa-crown"></i> Подписки</h1>
+                    <div class="header-actions">
+                        <select id="subscription-filter" class="filter-select">
+                            <option value="all">Все подписки</option>
+                            <option value="active">Только активные</option>
+                            <option value="expired">Истекшие</option>
+                        </select>
+                    </div>
+                </div>
 
-                <!-- Subscriptions Content -->
-                {% include 'components/subscriptions_content.html' %}
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Пользователь</th>
+                                <th>Тариф</th>
+                                <th>Начало</th>
+                                <th>Окончание</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="subscriptions-table-body">
+                            <tr>
+                                <td colspan="6" class="text-center">Загрузка...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            <!-- Instructions Section -->
-            <div id="instructions-section" style="display: none;">
-                {% include 'components/header.html' %}
-                <script>
-                    // Установка заголовка для инструкций
-                    document.querySelector('#instructions-section .header h1').innerHTML =
-                        '<i class="fas fa-book"></i> Инструкции';
-                </script>
+            <!-- Bot Management Section -->
+            <div id="bot-section" class="content-section" style="display: none;">
+                <div class="header">
+                    <h1><i class="fas fa-terminal"></i> Управление ботом</h1>
+                </div>
 
-                <!-- Instructions Content -->
-                {% include 'components/instructions_content.html' %}
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Состояние системы</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="status-item">
+                            <span class="status-label">Статус бота:</span>
+                            <span id="bot-status" class="status-value online">Online</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Последняя активность:</span>
+                            <span id="bot-last-active" class="status-value">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">База данных:</span>
+                            <span id="db-status" class="status-value online">Connected</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Действия</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="actions-grid">
+                            <button class="btn btn-primary" onclick="restartBot()">
+                                <i class="fas fa-redo"></i>
+                                <span>Перезапустить бота</span>
+                            </button>
+                            <button class="btn btn-secondary" onclick="clearBotCache()">
+                                <i class="fas fa-trash"></i>
+                                <span>Очистить кэш</span>
+                            </button>
+                            <button class="btn btn-secondary" onclick="checkBotStatus()">
+                                <i class="fas fa-sync"></i>
+                                <span>Проверить статус</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-
-            <!-- Settings Section -->
-            <div id="settings-section" style="display: none;">
-                {% include 'components/header.html' %}
-                <script>
-                    // Установка заголовка для настроек
-                    document.querySelector('#settings-section .header h1').innerHTML =
-                        '<i class="fas fa-cog"></i> Настройки';
-                </script>
-
-                <!-- Settings Content -->
-                {% include 'components/settings_content.html' %}
-            </div>
-
-            <!-- System Section -->
-            <div id="system-section" style="display: none;">
-                {% include 'components/header.html' %}
-                <script>
-                    // Установка заголовка для системы
-                    document.querySelector('#system-section .header h1').innerHTML =
-                        '<i class="fas fa-server"></i> Система';
-                </script>
-
-                <!-- System Content -->
-                {% include 'components/system_content.html' %}
-            </div>
-        </main>
+        </div>
     </div>
 
-    <!-- Modals -->
-    {% include 'components/modals.html' %}
+    <!-- Modals Container -->
+    <div id="modals-container"></div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='js/users.js') }}"></script>
     <script src="{{ url_for('static', filename='js/subscriptions.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/instructions.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/system.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 
 </html>

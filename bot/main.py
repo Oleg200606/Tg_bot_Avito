@@ -1,499 +1,479 @@
 import asyncio
 import logging
-import os
 import sys
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-import asyncpg
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
+from config import Config
+from database import db
+from payment_handler import YooKassaPayment
+from utils import validate_url
+
+# Настройка логирования для Docker
+logging.basicConfig(
+    level=getattr(logging, Config.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 logger = logging.getLogger(__name__)
 
-# Конфигурация
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8288743182:AAHif2v8dN0M0BGN7PCACfmJlekAR_d-hE0")
-ADMIN_IDS = [1226131544, 936840809]
+# Инициализация бота
+try:
+    Config.validate()
+    bot = Bot(
+        token=Config.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
+    dp = Dispatcher()
+except Exception as e:
+    logger.error(f"Ошибка инициализации бота: {e}")
+    sys.exit(1)
 
-# Database
-DB_CONFIG = {
-    'host': os.getenv("DB_HOST", "postgres"),
-    'port': os.getenv("DB_PORT", "5432"),
-    'database': os.getenv("DB_NAME", "avito_bot"),
-    'user': os.getenv("DB_USER", "postgres"),
-    'password': os.getenv("DB_PASSWORD", "1")
-}
-
-# Исправленная инициализация бота для aiogram 3.10.0
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-)
-dp = Dispatcher()
-
-class Database:
-    def __init__(self):
-        self.pool = None
-    
-    async def connect(self):
+# Функция для ожидания готовности БД
+async def wait_for_db(retries=10, delay=5):
+    """Ожидание подключения к БД"""
+    for i in range(retries):
         try:
-            self.pool = await asyncpg.create_pool(**DB_CONFIG)
+            logger.info(f"Попытка подключения к БД {i+1}/{retries}")
+            await db.connect()
+            await db.create_tables()
             logger.info("✅ Подключение к БД установлено")
             return True
         except Exception as e:
-            logger.error(f"❌ Ошибка подключения к БД: {e}")
-            return False
-    
-    async def init_tables(self):
-        async with self.pool.acquire() as conn:
-            # Создаем таблицы если их нет
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    telegram_id BIGINT UNIQUE NOT NULL,
-                    username VARCHAR(255),
-                    full_name VARCHAR(255),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_admin BOOLEAN DEFAULT FALSE
-                )
-            ''')
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS subscriptions (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                    start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    end_date TIMESTAMP NOT NULL,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    payment_id VARCHAR(255),
-                    plan VARCHAR(50) DEFAULT 'basic'
-                )
-            ''')
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS user_links (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                    link TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS instructions (
-                    id SERIAL PRIMARY KEY,
-                    title VARCHAR(255) NOT NULL,
-                    text_content TEXT,
-                    video_url VARCHAR(500),
-                    order_index INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            logger.info("✅ Таблицы проверены/созданы")
-            
-            # Добавляем тестовые инструкции
-            count = await conn.fetchval('SELECT COUNT(*) FROM instructions')
-            if count == 0:
-                await conn.execute('''
-                    INSERT INTO instructions (title, text_content, order_index) VALUES
-                    ('Как пользоваться ботом', '1. Купите подписку\n2. Добавляйте ссылки\n3. Получайте доступ к функциям', 1),
-                    ('Как добавить ссылку', 'Нажмите кнопку "🔗 Добавить ссылку" и отправьте ссылку', 2)
-                ''')
-                logger.info("✅ Добавлены тестовые инструкции")
+            logger.warning(f"Ошибка подключения к БД: {e}")
+            if i < retries - 1:
+                logger.info(f"Повторная попытка через {delay} секунд...")
+                await asyncio.sleep(delay)
+            else:
+                logger.error("Не удалось подключиться к БД после всех попыток")
+                return False
 
-db = Database()
+# Клавиатуры
+def get_main_menu(is_admin: bool = False):
+    keyboard = [
+        [KeyboardButton(text="📋 Инструкция")],
+        [KeyboardButton(text="🔗 Добавить ссылку")],
+        [KeyboardButton(text="💎 Купить подписку")],
+        [KeyboardButton(text="📊 Моя статистика")]
+    ]
+    if is_admin:
+        keyboard.append([KeyboardButton(text="👑 Админ панель")])
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
+def get_subscription_plans():
+    keyboard = []
+    for key, plan in Config.SUBSCRIPTION_PLANS.items():
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"{plan['name']} - {plan['price']}₽",
+                callback_data=f"buy_{key}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+# Команда /start
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    """Обработчик команды /start"""
     try:
-        async with db.pool.acquire() as conn:
-            user = await conn.fetchrow(
-                'SELECT * FROM users WHERE telegram_id = $1',
-                message.from_user.id
-            )
-            
-            if not user:
-                is_admin = message.from_user.id in ADMIN_IDS
-                user = await conn.fetchrow(
-                    '''INSERT INTO users (telegram_id, username, full_name, is_admin)
-                       VALUES ($1, $2, $3, $4) RETURNING *''',
-                    message.from_user.id,
-                    message.from_user.username,
-                    message.from_user.full_name or "Пользователь",
-                    is_admin
-                )
-                logger.info(f"✅ Создан пользователь: {message.from_user.id}")
-        
-        # Создаем клавиатуру
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="📋 Инструкция"), KeyboardButton(text="💎 Подписка")],
-                [KeyboardButton(text="🔗 Добавить ссылку"), KeyboardButton(text="📞 Помощь")],
-                [KeyboardButton(text="📊 Статистика")]
-            ],
-            resize_keyboard=True
+        user = await db.get_or_create_user(
+            telegram_id=message.from_user.id,
+            username=message.from_user.username,
+            full_name=message.from_user.full_name or "Пользователь"
         )
         
-        text = f"""👋 Привет, {message.from_user.full_name or 'друг'}!
-
-🤖 Я бот для управления подписками.
-
-✨ Функции:
-• Покупка и управление подписками
-• Хранение ссылок
-• Инструкции и помощь
-• Статистика
-
-Нажмите кнопки ниже или напишите /help"""
+        if not user:
+            await message.answer("❌ Ошибка при создании пользователя. Попробуйте позже.")
+            return
         
-        await message.answer(text, reply_markup=keyboard)
+        is_admin = message.from_user.id in Config.ADMIN_IDS
+        
+        welcome_text = f"""👋 Привет, {message.from_user.first_name}!
+
+🤖 Я бот для управления подписками с Яндекс Кассой.
+
+✨ <b>Доступные функции:</b>
+• Безопасная оплата через Яндекс Кассу
+• Добавление ссылок с учетом лимита
+• Просмотр статистики и истории
+• Автоматическое обновление подписок
+
+💎 <b>Тарифные планы:</b>
+1. 1 месяц (5 запросов) - 500₽
+2. 3 месяца (15 запросов) - 1200₽
+3. 6 месяцев (30 запросов) - 2000₽
+4. 12 месяцев (60 запросов) - 3500₽
+
+<b>Запрос</b> - добавление одной ссылки. Лимит обновляется при продлении.
+
+Используйте кнопки ниже для навигации! 🚀"""
+        
+        await message.answer(welcome_text, reply_markup=get_main_menu(is_admin))
         
     except Exception as e:
         logger.error(f"Ошибка в /start: {e}")
-        await message.answer("Привет! Я бот. Используйте команды из меню.")
+        await message.answer("Привет! Используйте команды из меню.")
 
+# Обработка покупки подписки
+@dp.message(F.text == "💎 Купить подписку")
+async def buy_subscription(message: Message):
+    text = """💎 <b>Выберите тарифный план:</b>
+
+1. <b>1 месяц</b> - 500₽
+   • 5 запросов ссылок
+   • Доступ на 30 дней
+
+2. <b>3 месяца</b> - 1200₽ (экономия 20%)
+   • 15 запросов ссылок
+   • Доступ на 90 дней
+
+3. <b>6 месяцев</b> - 2000₽ (экономия 33%)
+   • 30 запросов ссылок
+   • Доступ на 180 дней
+
+4. <b>12 месяцев</b> - 3500₽ (экономия 41%)
+   • 60 запросов ссылок
+   • Доступ на 365 дней
+
+Выберите подходящий вариант:"""
+    
+    await message.answer(text, reply_markup=get_subscription_plans())
+
+# Обработка выбора тарифа
+@dp.callback_query(F.data.startswith("buy_"))
+async def process_buy_callback(callback: CallbackQuery):
+    plan_key = callback.data.split("_")[1]
+    
+    if plan_key not in Config.SUBSCRIPTION_PLANS:
+        await callback.answer("❌ Тарифный план не найден")
+        return
+    
+    plan = Config.SUBSCRIPTION_PLANS[plan_key]
+    
+    # Получаем пользователя
+    user = await db.get_or_create_user(
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        full_name=callback.from_user.full_name or "Пользователь"
+    )
+    
+    if not user:
+        await callback.answer("❌ Ошибка пользователя")
+        return
+    
+    await callback.answer("⏳ Создаем платеж...")
+    
+    # Создаем платеж
+    payment_result = await YooKassaPayment.create_payment(
+        user_id=user['id'],
+        plan_key=plan_key,
+        telegram_id=callback.from_user.id
+    )
+    
+    if payment_result['success']:
+        payment_text = f"""✅ <b>Платеж создан!</b>
+
+💳 <b>Сумма:</b> {payment_result['amount']}₽
+📋 <b>Тариф:</b> {payment_result['plan_name']}
+📅 <b>Доступно запросов:</b> {plan['requests']}
+
+<b>Для оплаты перейдите по ссылке:</b>
+{payment_result['confirmation_url']}
+
+⚠️ <b>Важно:</b>
+• После успешной оплаты подписка активируется автоматически
+• Обычно это занимает 1-2 минуты
+• Проверить статус можно в "📊 Моя статистика"
+
+<b>В случае проблем:</b>
+• Если оплата прошла, но подписка не активировалась
+• Или возникли другие вопросы
+• Обратитесь в поддержку"""
+        
+        await callback.message.answer(payment_text)
+    else:
+        error_msg = payment_result.get('error', 'Неизвестная ошибка')
+        logger.error(f"Ошибка создания платежа: {error_msg}")
+        await callback.message.answer(f"❌ Ошибка создания платежа: {error_msg}\n\nПопробуйте позже или обратитесь в поддержку.")
+    
+    await callback.answer()
+
+# Добавление ссылки с проверкой лимита
+@dp.message(F.text == "🔗 Добавить ссылку")
+async def add_link_command(message: Message):
+    user = await db.get_or_create_user(
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        full_name=message.from_user.full_name or "Пользователь"
+    )
+    
+    if not user:
+        await message.answer("❌ Ошибка пользователя")
+        return
+    
+    # Проверяем лимит запросов
+    limit_check = await db.check_request_limit(user['id'])
+    
+    if not limit_check['has_access']:
+        await message.answer(limit_check['message'])
+        return
+    
+    await message.answer(
+        f"✅ <b>Доступно:</b> {limit_check['remaining']} из {limit_check['total']} запросов\n\n"
+        f"Отправьте мне ссылку для сохранения (формат: https://example.com):"
+    )
+
+# Обработка ссылок
+@dp.message(F.text.contains("http"))
+async def handle_link_message(message: Message):
+    # Валидация URL
+    if not validate_url(message.text):
+        await message.answer("❌ Некорректная ссылка. Используйте формат: https://example.com")
+        return
+    
+    user = await db.get_or_create_user(
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        full_name=message.from_user.full_name or "Пользователь"
+    )
+    
+    if not user:
+        await message.answer("❌ Ошибка пользователя")
+        return
+    
+    # Проверяем лимит запросов
+    limit_check = await db.check_request_limit(user['id'])
+    
+    if not limit_check['has_access']:
+        await message.answer(limit_check['message'])
+        return
+    
+    try:
+        # Добавляем ссылку
+        await db.add_user_link(user['id'], message.text)
+        
+        # Увеличиваем счетчик запросов
+        await db.increment_request_count(user['id'], limit_check['subscription_id'], message.text)
+        
+        # Обновляем информацию о лимите
+        new_limit = await db.check_request_limit(user['id'])
+        
+        await message.answer(
+            f"✅ <b>Ссылка сохранена!</b>\n\n"
+            f"🔗 {message.text[:50]}...\n\n"
+            f"📊 <b>Осталось запросов:</b> {new_limit['remaining']}/{new_limit['total']}"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка сохранения ссылки: {e}")
+        await message.answer("❌ Ошибка при сохранении ссылки. Попробуйте позже.")
+
+# Статистика пользователя
+@dp.message(F.text == "📊 Моя статистика")
+async def user_statistics(message: Message):
+    user = await db.get_or_create_user(
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        full_name=message.from_user.full_name or "Пользователь"
+    )
+    
+    if not user:
+        await message.answer("❌ Ошибка пользователя")
+        return
+    
+    stats = await db.get_user_statistics(user['id'])
+    
+    if stats.get('plan'):
+        end_date = stats['end_date'].strftime("%d.%m.%Y") if stats['end_date'] else "Нет"
+        days_left = (stats['end_date'].date() - datetime.now().date()).days if stats['end_date'] else 0
+        days_left_text = f"{days_left} дн." if days_left > 0 else "<b>Истекла</b>"
+        
+        text = f"""📊 <b>Ваша статистика</b>
+
+👤 <b>Пользователь:</b> {stats['full_name'] or 'Не указано'}
+📅 <b>Регистрация:</b> {stats['created_at'].strftime('%d.%m.%Y')}
+
+💎 <b>Подписка:</b>
+• Тариф: {stats['plan']}
+• Действует до: {end_date}
+• Осталось дней: {days_left_text}
+• Лимит запросов: {stats['used_requests']}/{stats['request_limit']}
+
+📈 <b>Активность:</b>
+• Всего запросов: {stats['total_requests'] or 0}
+• Всего платежей: {stats['total_payments'] or 0}
+• Потрачено: {stats['total_spent'] or 0}₽
+
+💡 <b>Совет:</b> Следите за лимитом запросов и продлевайте подписку вовремя!"""
+    else:
+        text = """📊 <b>Ваша статистика</b>
+
+❌ <b>У вас нет активной подписки.</b>
+
+💎 Для доступа к функциям бота приобретите подписку:
+• 1 месяц (5 запросов) - 500₽
+• 3 месяца (15 запросов) - 1200₽
+• 6 месяцев (30 запросов) - 2000₽
+• 12 месяцев (60 запросов) - 3500₽
+
+<b>Нажмите "💎 Купить подписку" для выбора тарифа.</b>
+
+✨ <b>Что дает подписка:</b>
+• Возможность добавлять ссылки
+• Доступ ко всем функциям бота
+• Приоритетную поддержку
+• Автоматическое обновление"""
+    
+    await message.answer(text)
+
+# Инструкции
 @dp.message(F.text == "📋 Инструкция")
 async def show_instructions(message: Message):
     try:
-        async with db.pool.acquire() as conn:
-            instructions = await conn.fetch('SELECT * FROM instructions ORDER BY order_index ASC')
+        instructions = await db.get_instructions()
         
         if instructions:
             text = "📖 <b>Инструкции по использованию бота:</b>\n\n"
             for inst in instructions:
-                text += f"<b>{inst['title']}</b>\n{inst['text_content']}\n"
-                if inst['video_url']:
-                    text += f"Видео: {inst['video_url']}\n"
-                text += "\n"
+                text += f"<b>{inst['title']}</b>\n{inst['text_content']}\n\n"
         else:
-            text = "Инструкции пока не добавлены."
+            text = "📝 Инструкции будут добавлены позже."
         
         await message.answer(text)
-        
     except Exception as e:
-        logger.error(f"Ошибка показа инструкций: {e}")
-        await message.answer("Ошибка при загрузке инструкций.")
+        logger.error(f"Ошибка загрузки инструкций: {e}")
+        await message.answer("❌ Ошибка загрузки инструкций. Попробуйте позже.")
 
-@dp.message(F.text == "💎 Подписка")
-async def show_subscription(message: Message):
-    try:
-        async with db.pool.acquire() as conn:
-            user = await conn.fetchrow(
-                'SELECT * FROM users WHERE telegram_id = $1',
-                message.from_user.id
-            )
-            
-            if user:
-                subscription = await conn.fetchrow(
-                    '''SELECT * FROM subscriptions 
-                       WHERE user_id = $1 AND is_active = TRUE 
-                       AND end_date > CURRENT_TIMESTAMP''',
-                    user['id']
-                )
-                
-                if subscription:
-                    end_date = subscription['end_date'].strftime("%d.%m.%Y")
-                    days_left = (subscription['end_date'].date() - datetime.now().date()).days
-                    text = f"""✅ <b>Ваша подписка активна</b>
-
-📅 Действует до: {end_date}
-⏰ Осталось дней: {days_left}
-🎯 Тариф: {subscription['plan']}
-"""
-                else:
-                    text = """❌ <b>У вас нет активной подписки</b>
-
-💎 <b>Доступные тарифы:</b>
-• 1 месяц - 500₽
-• 3 месяца - 1200₽ (экономия 10%)
-• 6 месяцев - 2000₽ (экономия 17%)
-• 12 месяцев - 3500₽ (экономия 30%)
-
-Для покупки напишите /buy"""
-            else:
-                text = "Сначала используйте /start"
-        
-        await message.answer(text)
-        
-    except Exception as e:
-        logger.error(f"Ошибка подписки: {e}")
-        await message.answer("Ошибка при проверке подписки")
-
-@dp.message(F.text == "🔗 Добавить ссылку")
-async def add_link(message: Message):
-    try:
-        async with db.pool.acquire() as conn:
-            user = await conn.fetchrow(
-                'SELECT * FROM users WHERE telegram_id = $1',
-                message.from_user.id
-            )
-            
-            if user:
-                subscription = await conn.fetchrow(
-                    '''SELECT * FROM subscriptions 
-                       WHERE user_id = $1 AND is_active = TRUE 
-                       AND end_date > CURRENT_TIMESTAMP''',
-                    user['id']
-                )
-                
-                if subscription:
-                    await message.answer("🔗 Отправьте мне ссылку для сохранения (формат: https://example.com):")
-                else:
-                    await message.answer("❌ <b>Только для подписчиков!</b>\n\nКупите подписку через кнопку '💎 Подписка' или команду /buy")
-            else:
-                await message.answer("Сначала используйте /start")
-                
-    except Exception as e:
-        logger.error(f"Ошибка добавления ссылки: {e}")
-        await message.answer("Ошибка")
-
-@dp.message(F.text == "📞 Помощь")
-async def show_help(message: Message):
-    text = """📞 <b>Помощь и поддержка</b>
-
-<b>Основные команды:</b>
-/start - Начать работу
-/help - Эта справка
-/buy - Купить подписку
-/subscription - Проверить подписку
-/link - Добавить ссылку
-
-<b>Для администраторов:</b>
-/admin - Панель админа
-/users - Список пользователей
-/stats - Статистика
-
-<b>Проблемы?</b>
-Обратитесь к администратору."""
+# Админ панель
+@dp.message(F.text == "👑 Админ панель")
+async def admin_panel(message: Message):
+    if message.from_user.id not in Config.ADMIN_IDS:
+        await message.answer("⛔ Доступ запрещен")
+        return
     
+    text = f"""👑 <b>Админ панель</b>
+
+Для полного управления системой используйте веб-панель:
+{Config.ADMIN_PANEL_URL}
+
+<b>Основные функции веб-панели:</b>
+• Управление пользователями и подписками
+• Настройка тарифных планов
+• Просмотр статистики и платежей
+• Редактирование инструкций
+• Мониторинг системы
+
+<b>Базовые команды в боте:</b>
+• /stats - Статистика бота
+• /users - Список пользователей
+• /payments - Статистика платежей"""
+
     await message.answer(text)
 
-@dp.message(F.text == "📊 Статистика")
-async def show_stats(message: Message):
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("Эта функция доступна только администраторам.")
+# Команды для админов
+@dp.message(Command("stats"))
+async def admin_stats(message: Message):
+    if message.from_user.id not in Config.ADMIN_IDS:
         return
     
     try:
-        async with db.pool.acquire() as conn:
-            users_count = await conn.fetchval('SELECT COUNT(*) FROM users')
-            active_subs = await conn.fetchval('''
-                SELECT COUNT(*) FROM subscriptions 
-                WHERE is_active = TRUE AND end_date > CURRENT_TIMESTAMP
-            ''')
-            total_links = await conn.fetchval('SELECT COUNT(*) FROM user_links')
-            
-            # Добавляем тестовую подписку для админа
-            admin_user = await conn.fetchrow('SELECT * FROM users WHERE telegram_id = $1', message.from_user.id)
-            if admin_user:
-                has_sub = await conn.fetchrow('SELECT * FROM subscriptions WHERE user_id = $1', admin_user['id'])
-                if not has_sub:
-                    end_date = datetime.now() + timedelta(days=365)
-                    await conn.execute('''
-                        INSERT INTO subscriptions (user_id, end_date, plan)
-                        VALUES ($1, $2, $3)
-                    ''', admin_user['id'], end_date, 'admin')
+        stats = await db.get_statistics()
+        payment_stats = await db.get_payments_statistics(30)
         
         text = f"""📊 <b>Статистика бота</b>
 
-👥 Всего пользователей: {users_count}
-✅ Активных подписок: {active_subs}
-🔗 Сохранено ссылок: {total_links}
-👑 Вы администратор"""
+👥 <b>Пользователей:</b> {stats.get('total_users', 0)}
+💎 <b>Активных подписок:</b> {stats.get('current_subscribers', 0)}
+🔗 <b>Всего ссылок:</b> {stats.get('total_links', 0)}
+
+💰 <b>Финансы (за 30 дней):</b>
+• Всего платежей: {payment_stats.get('total_payments', 0)}
+• Успешных: {payment_stats.get('successful_payments', 0)}
+• В ожидании: {payment_stats.get('pending_payments', 0)}
+• Выручка: {payment_stats.get('total_revenue', 0)}₽
+• Средний чек: {payment_stats.get('avg_payment', 0):.2f}₽
+
+📈 <b>Использование лимитов:</b>
+• Использовано запросов: {stats.get('total_requests_used', 0)}
+• Всего доступно: {stats.get('total_requests_limit', 0)}"""
         
         await message.answer(text)
-        
     except Exception as e:
         logger.error(f"Ошибка статистики: {e}")
-        await message.answer("Ошибка при получении статистики.")
+        await message.answer("❌ Ошибка загрузки статистики")
 
-@dp.message(Command("buy"))
-async def cmd_buy(message: Message):
-    """Покупка подписки"""
-    text = """💎 <b>Покупка подписки</b>
-
-Выберите тариф:
-1. 1 месяц - 500₽
-2. 3 месяца - 1200₽
-3. 6 месяцев - 2000₽
-4. 12 месяцев - 3500₽
-
-Для тестирования, администраторы получают бесплатную подписку автоматически.
-
-<b>Оплата:</b>
-Переведите средства на карту XXX XXX XXX
-и отправьте скриншот оплаты администратору."""
+# Кнопка "Назад"
+@dp.callback_query(F.data == "back_to_main")
+async def back_to_main(callback: CallbackQuery):
+    user = await db.get_or_create_user(
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        full_name=callback.from_user.full_name or "Пользователь"
+    )
     
-    await message.answer(text)
-
-@dp.message(Command("admin"))
-async def cmd_admin(message: Message):
-    """Панель администратора"""
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ У вас нет доступа к этой команде.")
-        return
+    if user:
+        is_admin = callback.from_user.id in Config.ADMIN_IDS
+        await callback.message.edit_text("Главное меню", reply_markup=None)
+        await callback.message.answer("Главное меню", reply_markup=get_main_menu(is_admin))
     
-    try:
-        async with db.pool.acquire() as conn:
-            users_count = await conn.fetchval('SELECT COUNT(*) FROM users')
-            subs_count = await conn.fetchval('''
-                SELECT COUNT(DISTINCT user_id) 
-                FROM subscriptions 
-                WHERE is_active = TRUE AND end_date > CURRENT_TIMESTAMP
-            ''')
-            recent_users = await conn.fetch('SELECT * FROM users ORDER BY created_at DESC LIMIT 5')
-        
-        recent_text = ""
-        for user in recent_users:
-            date = user['created_at'].strftime("%d.%m")
-            recent_text += f"• {user['full_name'] or 'Без имени'} ({date})\n"
-        
-        text = f"""👑 <b>Панель администратора</b>
-
-📊 <b>Статистика:</b>
-• Пользователей: {users_count}
-• Активных подписок: {subs_count}
-
-👥 <b>Последние пользователи:</b>
-{recent_text}
-
-<b>Команды админа:</b>
-• /users - Полный список
-• /stats - Детальная статистика
-• Добавить ссылку вручную: /addlink [user_id] [ссылка]"""
-        
-        await message.answer(text)
-        
-    except Exception as e:
-        logger.error(f"Ошибка в /admin: {e}")
-        await message.answer("Ошибка при получении статистики.")
+    await callback.answer()
 
 @dp.message(Command("users"))
-async def cmd_users(message: Message):
-    """Список пользователей (админ)"""
-    if message.from_user.id not in ADMIN_IDS:
+async def admin_users(message: Message):
+    if message.from_user.id not in Config.ADMIN_IDS:
         return
     
     try:
-        async with db.pool.acquire() as conn:
-            users = await conn.fetch('SELECT * FROM users ORDER BY created_at DESC LIMIT 15')
+        users = await db.get_all_users(20)
         
         if not users:
-            await message.answer("Нет пользователей.")
+            await message.answer("📭 Пользователей нет")
             return
         
-        text = "👥 <b>Последние 15 пользователей:</b>\n\n"
+        text = "👥 <b>Последние 20 пользователей:</b>\n\n"
         for user in users:
-            created = user['created_at'].strftime("%d.%m")
-            admin = "👑" if user['is_admin'] else "👤"
-            text += f"{admin} <b>{user['full_name'] or 'Без имени'}</b>\n"
+            created_at = user['created_at'].strftime("%d.%m.%Y %H:%M")
+            text += f"👤 <b>{user['full_name'] or 'Без имени'}</b>\n"
+            text += f"   ID: {user['telegram_id']}\n"
             text += f"   @{user['username'] or 'нет'}\n"
-            text += f"   ID: {user['telegram_id']}, Дата: {created}\n\n"
-        
-        await message.answer(text)
-        
-    except Exception as e:
-        logger.error(f"Ошибка в /users: {e}")
-        await message.answer("Ошибка при получении списка пользователей.")
-
-@dp.message(Command("test"))
-async def cmd_test(message: Message):
-    """Тестовая команда"""
-    await message.answer(f"✅ <b>Бот работает!</b>\n\nВаш ID: <code>{message.from_user.id}</code>\nИмя: {message.from_user.full_name}")
-
-@dp.message(Command("db"))
-async def cmd_db(message: Message):
-    """Проверка БД"""
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("Только для админов")
-        return
-    
-    try:
-        async with db.pool.acquire() as conn:
-            users_count = await conn.fetchval('SELECT COUNT(*) FROM users')
-            subs_count = await conn.fetchval('SELECT COUNT(*) FROM subscriptions')
-            links_count = await conn.fetchval('SELECT COUNT(*) FROM user_links')
-            instructions_count = await conn.fetchval('SELECT COUNT(*) FROM instructions')
+            text += f"   📅 Регистрация: {created_at}\n"
+            text += f"   💎 Подписок: {user['total_subscriptions']}\n"
+            text += f"   💳 Платежей: {user['total_payments']}\n"
             
-            text = f"""✅ <b>База данных работает!</b>
-
-📊 <b>Статистика БД:</b>
-• Пользователей: {users_count}
-• Подписок: {subs_count}
-• Ссылок: {links_count}
-• Инструкций: {instructions_count}
-
-🎯 <b>Ваш статус:</b> Администратор"""
+            if user['last_subscription_end']:
+                last_sub = user['last_subscription_end'].strftime("%d.%m.%Y")
+                text += f"   📅 Последняя подписка до: {last_sub}\n"
+            
+            text += "─" * 30 + "\n"
         
         await message.answer(text)
     except Exception as e:
-        await message.answer(f"❌ <b>Ошибка БД:</b>\n<code>{str(e)}</code>")
+        logger.error(f"Ошибка загрузки пользователей: {e}")
+        await message.answer("❌ Ошибка загрузки пользователей")
 
-@dp.message(F.text.contains("http"))
-async def handle_link(message: Message):
-    """Обработка ссылок от пользователей"""
-    try:
-        async with db.pool.acquire() as conn:
-            user = await conn.fetchrow(
-                'SELECT * FROM users WHERE telegram_id = $1',
-                message.from_user.id
-            )
-            
-            if user:
-                subscription = await conn.fetchrow(
-                    '''SELECT * FROM subscriptions 
-                       WHERE user_id = $1 AND is_active = TRUE 
-                       AND end_date > CURRENT_TIMESTAMP''',
-                    user['id']
-                )
-                
-                if subscription:
-                    # Сохраняем ссылку
-                    await conn.execute(
-                        'INSERT INTO user_links (user_id, link) VALUES ($1, $2)',
-                        user['id'], message.text
-                    )
-                    
-                    # Получаем количество ссылок пользователя
-                    links_count = await conn.fetchval(
-                        'SELECT COUNT(*) FROM user_links WHERE user_id = $1',
-                        user['id']
-                    )
-                    
-                    text = f"""✅ <b>Ссылка сохранена!</b>
-
-🔗 <code>{message.text[:50]}...</code>
-
-📁 Всего ваших ссылок: {links_count}
-
-Можете отправить следующую ссылку."""
-                    
-                    await message.answer(text)
-                else:
-                    await message.answer("❌ Только для подписчиков! Купите подписку через /buy")
-            else:
-                await message.answer("Сначала используйте /start")
-                
-    except Exception as e:
-        logger.error(f"Ошибка сохранения ссылки: {e}")
-        await message.answer("❌ Ошибка при сохранении ссылки. Убедитесь, что это корректная ссылка.")
-
+# Основная функция
 async def main():
-    logger.info("🚀 Запуск бота...")
+    logger.info("🚀 Запуск бота подписки...")
     
-    # Подключение к БД
-    if not await db.connect():
-        logger.error("Не удалось подключиться к БД")
+    # Ждем подключения к БД
+    if not await wait_for_db():
+        logger.error("Не удалось подключиться к БД. Завершение работы.")
         sys.exit(1)
     
-    # Инициализация таблиц
-    await db.init_tables()
-    
     # Запуск бота
-    logger.info("✅ Бот запущен и готов к работе!")
-    await dp.start_polling(bot)
+    try:
+        logger.info("✅ Бот запущен и готов к работе!")
+        await dp.start_polling(bot)
+    except Exception as e:
+        logger.error(f"Ошибка запуска бота: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     asyncio.run(main())
