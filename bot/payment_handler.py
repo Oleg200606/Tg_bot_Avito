@@ -1,10 +1,8 @@
-import yookassa
 from yookassa import Payment, Configuration
-from datetime import datetime
 import uuid
 import logging
 from config import Config
-from database import db
+from .database import db_instance as db
 
 logger = logging.getLogger(__name__)
 

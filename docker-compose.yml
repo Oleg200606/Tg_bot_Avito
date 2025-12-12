@@ -1,11 +1,8 @@
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: subscription_postgres
-    environment:
-      POSTGRES_DB: avito_bot
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql

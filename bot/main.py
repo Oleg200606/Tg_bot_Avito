@@ -1,27 +1,26 @@
 import asyncio
 import logging
 import sys
-import time
 from datetime import datetime
 
-from aiogram import Bot, Dispatcher, Router, F
+from ..bot2.keyboards import get_main_menu, get_subscription_plans
+
+from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
 from config import Config
-from database import db
+from .database import Database, db_instance
 from payment_handler import YooKassaPayment
 from utils import validate_url
 
 # Настройка логирования для Docker
 logging.basicConfig(
     level=getattr(logging, Config.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
 
@@ -29,22 +28,23 @@ logger = logging.getLogger(__name__)
 try:
     Config.validate()
     bot = Bot(
-        token=Config.BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        token=Config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     dp = Dispatcher()
 except Exception as e:
     logger.error(f"Ошибка инициализации бота: {e}")
     sys.exit(1)
 
+
 # Функция для ожидания готовности БД
-async def wait_for_db(retries=10, delay=5):
+async def wait_for_db(retries: int = 10, delay: int = 5):
+    global db_instance
     """Ожидание подключения к БД"""
     for i in range(retries):
         try:
+            db_instance = await Database.create()
             logger.info(f"Попытка подключения к БД {i+1}/{retries}")
-            await db.connect()
-            await db.create_tables()
+            await db_instance.create_tables()
             logger.info("✅ Подключение к БД установлено")
             return True
         except Exception as e:
@@ -56,46 +56,25 @@ async def wait_for_db(retries=10, delay=5):
                 logger.error("Не удалось подключиться к БД после всех попыток")
                 return False
 
-# Клавиатуры
-def get_main_menu(is_admin: bool = False):
-    keyboard = [
-        [KeyboardButton(text="📋 Инструкция")],
-        [KeyboardButton(text="🔗 Добавить ссылку")],
-        [KeyboardButton(text="💎 Купить подписку")],
-        [KeyboardButton(text="📊 Моя статистика")]
-    ]
-    if is_admin:
-        keyboard.append([KeyboardButton(text="👑 Админ панель")])
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-
-def get_subscription_plans():
-    keyboard = []
-    for key, plan in Config.SUBSCRIPTION_PLANS.items():
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"{plan['name']} - {plan['price']}₽",
-                callback_data=f"buy_{key}"
-            )
-        ])
-    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")])
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 # Команда /start
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     try:
-        user = await db.get_or_create_user(
+        user = await db_instance.get_or_create_user(
             telegram_id=message.from_user.id,
-            username=message.from_user.username,
-            full_name=message.from_user.full_name or "Пользователь"
+            username=message.from_user.username ,
+            full_name=message.from_user.full_name or "Пользователь",
         )
-        
+
         if not user:
-            await message.answer("❌ Ошибка при создании пользователя. Попробуйте позже.")
+            await message.answer(
+                "❌ Ошибка при создании пользователя. Попробуйте позже."
+            )
             return
-        
+
         is_admin = message.from_user.id in Config.ADMIN_IDS
-        
+
         welcome_text = f"""👋 Привет, {message.from_user.first_name}!
 
 🤖 Я бот для управления подписками с Яндекс Кассой.
@@ -115,12 +94,13 @@ async def cmd_start(message: Message):
 <b>Запрос</b> - добавление одной ссылки. Лимит обновляется при продлении.
 
 Используйте кнопки ниже для навигации! 🚀"""
-        
+
         await message.answer(welcome_text, reply_markup=get_main_menu(is_admin))
-        
+
     except Exception as e:
         logger.error(f"Ошибка в /start: {e}")
         await message.answer("Привет! Используйте команды из меню.")
+
 
 # Обработка покупки подписки
 @dp.message(F.text == "💎 Купить подписку")
@@ -144,41 +124,40 @@ async def buy_subscription(message: Message):
    • Доступ на 365 дней
 
 Выберите подходящий вариант:"""
-    
+
     await message.answer(text, reply_markup=get_subscription_plans())
+
 
 # Обработка выбора тарифа
 @dp.callback_query(F.data.startswith("buy_"))
 async def process_buy_callback(callback: CallbackQuery):
     plan_key = callback.data.split("_")[1]
-    
+
     if plan_key not in Config.SUBSCRIPTION_PLANS:
         await callback.answer("❌ Тарифный план не найден")
         return
-    
+
     plan = Config.SUBSCRIPTION_PLANS[plan_key]
-    
+
     # Получаем пользователя
-    user = await db.get_or_create_user(
+    user = await db_instance.get_or_create_user(
         telegram_id=callback.from_user.id,
         username=callback.from_user.username,
-        full_name=callback.from_user.full_name or "Пользователь"
+        full_name=callback.from_user.full_name or "Пользователь",
     )
-    
+
     if not user:
         await callback.answer("❌ Ошибка пользователя")
         return
-    
+
     await callback.answer("⏳ Создаем платеж...")
-    
+
     # Создаем платеж
     payment_result = await YooKassaPayment.create_payment(
-        user_id=user['id'],
-        plan_key=plan_key,
-        telegram_id=callback.from_user.id
+        user_id=user["id"], plan_key=plan_key, telegram_id=callback.from_user.id
     )
-    
-    if payment_result['success']:
+
+    if payment_result["success"]:
         payment_text = f"""✅ <b>Платеж создан!</b>
 
 💳 <b>Сумма:</b> {payment_result['amount']}₽
@@ -197,75 +176,83 @@ async def process_buy_callback(callback: CallbackQuery):
 • Если оплата прошла, но подписка не активировалась
 • Или возникли другие вопросы
 • Обратитесь в поддержку"""
-        
+
         await callback.message.answer(payment_text)
     else:
-        error_msg = payment_result.get('error', 'Неизвестная ошибка')
+        error_msg = payment_result.get("error", "Неизвестная ошибка")
         logger.error(f"Ошибка создания платежа: {error_msg}")
-        await callback.message.answer(f"❌ Ошибка создания платежа: {error_msg}\n\nПопробуйте позже или обратитесь в поддержку.")
-    
+        await callback.message.answer(
+            f"❌ Ошибка создания платежа: {error_msg}\n\nПопробуйте позже или обратитесь в поддержку."
+        )
+
     await callback.answer()
+
 
 # Добавление ссылки с проверкой лимита
 @dp.message(F.text == "🔗 Добавить ссылку")
 async def add_link_command(message: Message):
-    user = await db.get_or_create_user(
+    user = await db_instance.get_or_create_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
-        full_name=message.from_user.full_name or "Пользователь"
+        full_name=message.from_user.full_name or "Пользователь",
     )
-    
+
     if not user:
         await message.answer("❌ Ошибка пользователя")
         return
-    
+
     # Проверяем лимит запросов
-    limit_check = await db.check_request_limit(user['id'])
-    
-    if not limit_check['has_access']:
-        await message.answer(limit_check['message'])
+    limit_check = await db_instance.check_request_limit(user["id"])
+
+    if not limit_check["has_access"]:
+        await message.answer(limit_check["message"])
         return
-    
+
     await message.answer(
         f"✅ <b>Доступно:</b> {limit_check['remaining']} из {limit_check['total']} запросов\n\n"
         f"Отправьте мне ссылку для сохранения (формат: https://example.com):"
     )
+
 
 # Обработка ссылок
 @dp.message(F.text.contains("http"))
 async def handle_link_message(message: Message):
     # Валидация URL
     if not validate_url(message.text):
-        await message.answer("❌ Некорректная ссылка. Используйте формат: https://example.com")
+        await message.answer(
+            "❌ Некорректная ссылка. Используйте формат: https://example.com"
+        )
         return
-    
-    user = await db.get_or_create_user(
+
+    user = await db_instance.get_or_create_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
-        full_name=message.from_user.full_name or "Пользователь"
+        full_name=message.from_user.full_name or "Пользователь",
     )
-    
+
     if not user:
         await message.answer("❌ Ошибка пользователя")
         return
-    
+
     # Проверяем лимит запросов
-    limit_check = await db.check_request_limit(user['id'])
-    
-    if not limit_check['has_access']:
-        await message.answer(limit_check['message'])
+    limit_check = await db_instance.check_request_limit(user["id"])
+
+    if not limit_check["has_access"]:
+        await message.answer(limit_check["message"])
         return
-    
+
     try:
         # Добавляем ссылку
-        await db.add_user_link(user['id'], message.text)
-        
+        await db_instance.add_user_link(user["id"], message.text)
+
         # Увеличиваем счетчик запросов
-        await db.increment_request_count(user['id'], limit_check['subscription_id'], message.text)
-        
+        await db_instance.increment_request_count(
+            user["id"], limit_check["subscription_id"], message.text
+        )
+
         # Обновляем информацию о лимите
-        new_limit = await db.check_request_limit(user['id'])
-        
+        new_limit = await db_instance.check_request_limit(user["id"])
+
         await message.answer(
             f"✅ <b>Ссылка сохранена!</b>\n\n"
             f"🔗 {message.text[:50]}...\n\n"
@@ -275,26 +262,33 @@ async def handle_link_message(message: Message):
         logger.error(f"Ошибка сохранения ссылки: {e}")
         await message.answer("❌ Ошибка при сохранении ссылки. Попробуйте позже.")
 
+
 # Статистика пользователя
 @dp.message(F.text == "📊 Моя статистика")
 async def user_statistics(message: Message):
-    user = await db.get_or_create_user(
+    user = await db_instance.get_or_create_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
-        full_name=message.from_user.full_name or "Пользователь"
+        full_name=message.from_user.full_name or "Пользователь",
     )
-    
+
     if not user:
         await message.answer("❌ Ошибка пользователя")
         return
-    
-    stats = await db.get_user_statistics(user['id'])
-    
-    if stats.get('plan'):
-        end_date = stats['end_date'].strftime("%d.%m.%Y") if stats['end_date'] else "Нет"
-        days_left = (stats['end_date'].date() - datetime.now().date()).days if stats['end_date'] else 0
+
+    stats = await db_instance.get_user_statistics(user["id"])
+
+    if stats.get("plan"):
+        end_date = (
+            stats["end_date"].strftime("%d.%m.%Y") if stats["end_date"] else "Нет"
+        )
+        days_left = (
+            (stats["end_date"].date() - datetime.now().date()).days
+            if stats["end_date"]
+            else 0
+        )
         days_left_text = f"{days_left} дн." if days_left > 0 else "<b>Истекла</b>"
-        
+
         text = f"""📊 <b>Ваша статистика</b>
 
 👤 <b>Пользователь:</b> {stats['full_name'] or 'Не указано'}
@@ -330,26 +324,28 @@ async def user_statistics(message: Message):
 • Доступ ко всем функциям бота
 • Приоритетную поддержку
 • Автоматическое обновление"""
-    
+
     await message.answer(text)
+
 
 # Инструкции
 @dp.message(F.text == "📋 Инструкция")
 async def show_instructions(message: Message):
     try:
-        instructions = await db.get_instructions()
-        
+        instructions = await db_instance.get_instructions()
+
         if instructions:
             text = "📖 <b>Инструкции по использованию бота:</b>\n\n"
             for inst in instructions:
                 text += f"<b>{inst['title']}</b>\n{inst['text_content']}\n\n"
         else:
             text = "📝 Инструкции будут добавлены позже."
-        
+
         await message.answer(text)
     except Exception as e:
         logger.error(f"Ошибка загрузки инструкций: {e}")
         await message.answer("❌ Ошибка загрузки инструкций. Попробуйте позже.")
+
 
 # Админ панель
 @dp.message(F.text == "👑 Админ панель")
@@ -357,7 +353,7 @@ async def admin_panel(message: Message):
     if message.from_user.id not in Config.ADMIN_IDS:
         await message.answer("⛔ Доступ запрещен")
         return
-    
+
     text = f"""👑 <b>Админ панель</b>
 
 Для полного управления системой используйте веб-панель:
@@ -377,16 +373,17 @@ async def admin_panel(message: Message):
 
     await message.answer(text)
 
+
 # Команды для админов
 @dp.message(Command("stats"))
 async def admin_stats(message: Message):
     if message.from_user.id not in Config.ADMIN_IDS:
         return
-    
+
     try:
-        stats = await db.get_statistics()
-        payment_stats = await db.get_payments_statistics(30)
-        
+        stats = await db_instance.get_statistics()
+        payment_stats = await db_instance.get_payments_statistics(30)
+
         text = f"""📊 <b>Статистика бота</b>
 
 👥 <b>Пользователей:</b> {stats.get('total_users', 0)}
@@ -403,70 +400,75 @@ async def admin_stats(message: Message):
 📈 <b>Использование лимитов:</b>
 • Использовано запросов: {stats.get('total_requests_used', 0)}
 • Всего доступно: {stats.get('total_requests_limit', 0)}"""
-        
+
         await message.answer(text)
     except Exception as e:
         logger.error(f"Ошибка статистики: {e}")
         await message.answer("❌ Ошибка загрузки статистики")
 
+
 # Кнопка "Назад"
 @dp.callback_query(F.data == "back_to_main")
 async def back_to_main(callback: CallbackQuery):
-    user = await db.get_or_create_user(
+    user = await db_instance.get_or_create_user(
         telegram_id=callback.from_user.id,
         username=callback.from_user.username,
-        full_name=callback.from_user.full_name or "Пользователь"
+        full_name=callback.from_user.full_name or "Пользователь",
     )
-    
+
     if user:
         is_admin = callback.from_user.id in Config.ADMIN_IDS
         await callback.message.edit_text("Главное меню", reply_markup=None)
-        await callback.message.answer("Главное меню", reply_markup=get_main_menu(is_admin))
-    
+        await callback.message.answer(
+            "Главное меню", reply_markup=get_main_menu(is_admin)
+        )
+
     await callback.answer()
+
 
 @dp.message(Command("users"))
 async def admin_users(message: Message):
     if message.from_user.id not in Config.ADMIN_IDS:
         return
-    
+
     try:
-        users = await db.get_all_users(20)
-        
+        users = await db_instance.get_all_users(20)
+
         if not users:
             await message.answer("📭 Пользователей нет")
             return
-        
+
         text = "👥 <b>Последние 20 пользователей:</b>\n\n"
         for user in users:
-            created_at = user['created_at'].strftime("%d.%m.%Y %H:%M")
+            created_at = user["created_at"].strftime("%d.%m.%Y %H:%M")
             text += f"👤 <b>{user['full_name'] or 'Без имени'}</b>\n"
             text += f"   ID: {user['telegram_id']}\n"
             text += f"   @{user['username'] or 'нет'}\n"
             text += f"   📅 Регистрация: {created_at}\n"
             text += f"   💎 Подписок: {user['total_subscriptions']}\n"
             text += f"   💳 Платежей: {user['total_payments']}\n"
-            
-            if user['last_subscription_end']:
-                last_sub = user['last_subscription_end'].strftime("%d.%m.%Y")
+
+            if user["last_subscription_end"]:
+                last_sub = user["last_subscription_end"].strftime("%d.%m.%Y")
                 text += f"   📅 Последняя подписка до: {last_sub}\n"
-            
+
             text += "─" * 30 + "\n"
-        
+
         await message.answer(text)
     except Exception as e:
         logger.error(f"Ошибка загрузки пользователей: {e}")
         await message.answer("❌ Ошибка загрузки пользователей")
 
+
 # Основная функция
 async def main():
     logger.info("🚀 Запуск бота подписки...")
-    
+
     # Ждем подключения к БД
     if not await wait_for_db():
         logger.error("Не удалось подключиться к БД. Завершение работы.")
         sys.exit(1)
-    
+
     # Запуск бота
     try:
         logger.info("✅ Бот запущен и готов к работе!")
@@ -474,6 +476,7 @@ async def main():
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
