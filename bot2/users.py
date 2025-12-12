@@ -6,20 +6,23 @@ from .logger import get_logger
 
 log = get_logger(__name__)
 
+
 def get_user_by_telegram_id(telegram_id: int) -> User | None:
 
     with new_session() as session:
-        statement =select(User).where(User.telegram_id == telegram_id)
+        statement = select(User).where(User.telegram_id == telegram_id)
         user = session.scalar(statement)
         if not User:
             log.error("No such user with telegram id %d", telegram_id)
             return None
         return user
 
-def create_user(telegram_id: int, username: str) -> User |None:
+
+def create_user(telegram_id: int, username: str, full_name: str) -> User | None:
     user = User()
     user.username = username
     user.telegram_id = telegram_id
+    user.full_name = full_name
     with new_session() as session:
         try:
             session.add(user)
@@ -29,14 +32,12 @@ def create_user(telegram_id: int, username: str) -> User |None:
             return None
 
     return user
-    
-def get_or_create_user(
-        telegram_id: int,
-        username: str,
-) -> User:
+
+
+def get_or_create_user(telegram_id: int, username: str, full_name: str) -> User:
     usr = get_user_by_telegram_id(telegram_id)
     if not usr:
-        new_user = create_user(telegram_id=telegram_id, username=username)
+        new_user = create_user(telegram_id=telegram_id, username=username, full_name=full_name)
         if not new_user:
             raise Exception("failed create new user", telegram_id, username)
         return new_user

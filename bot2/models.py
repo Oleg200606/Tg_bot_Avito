@@ -17,7 +17,7 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
     username: Mapped[str] = mapped_column()
     full_name: Mapped[str] = mapped_column()
-    is_admin: Mapped[bool] = mapped_column()
+    is_admin: Mapped[bool] = mapped_column(default=False)
 
 
 class TariffPlan(Base):

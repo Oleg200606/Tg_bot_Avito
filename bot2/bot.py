@@ -27,7 +27,7 @@ async def start_polling(conf: Config):
 async def cmd_start(message: Message):
     if not message.from_user:
         return
-    user = get_or_create_user(message.from_user.id, message.from_user.username or "")
+    user = get_or_create_user(message.from_user.id, message.from_user.username or "", message.from_user.full_name)
     if not user:
         await message.answer("Что-то пошло не так")
     

@@ -48,7 +48,9 @@ class Config:
         if not self.DB_PASSWORD:
             raise ValueError("DB_PASSWORD не установлен")
     def get_postgres_url(self):
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        url =f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        print("DATABASE_URL", url)
+        return url
 
     # VAT codes explanation:
     # 1 = НДС 20%
