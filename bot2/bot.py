@@ -6,7 +6,9 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from .users import get_or_create_user
-
+from .models import TariffPlan
+from .database_engine import new_session
+from sqlalchemy import select
 
 bot: Bot
 dispatcher = Dispatcher()
@@ -17,6 +19,13 @@ def __init__(conf: Config):
     bot = Bot(
         token=conf.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
+
+
+def _get_tariff_plans() -> list[TariffPlan]:
+    with new_session() as session:
+        statement = select(TariffPlan).where(TariffPlan.is_active)
+        plans = session.scalars(statement)
+        return list(plans)
 
 
 async def start_polling(conf: Config):
@@ -36,11 +45,13 @@ async def cmd_start(message: Message):
     if not user:
         await message.answer("Что-то пошло не так")
 
-    await message.answer(__welcome_text(message.from_user.username or "неизвестный"))
+    await message.answer(
+        __welcome_text(message.from_user.username or "неизвестный", _get_tariff_plans())
+    )
 
 
-def __welcome_text(username: str):
-    return f"""
+def __welcome_text(username: str, tariff_plans: list[TariffPlan]):
+    mesasge = f"""
 👋 Привет, {username}!
 
 🤖 Я бот для управления подписками с Яндекс Кассой.
@@ -51,31 +62,30 @@ def __welcome_text(username: str):
 • Просмотр статистики и истории
 • Автоматическое обновление подписок
 
-💎 <b>Тарифные планы:</b>
-1. 1 месяц (5 запросов) - 500₽
-2. 3 месяца (15 запросов) - 1200₽
-3. 6 месяцев (30 запросов) - 2000₽
-4. 12 месяцев (60 запросов) - 3500₽
+💎 <b>Тарифные планы:</b>"""
+    for plan in tariff_plans:
+        mesasge += _print_tariff_plan(plan)
+    mesasge += """
 
-<b>Запрос</b> - добавление одной ссылки. Лимит обновляется при продлении.
+<b>Запрос</b> - добавление одной ссылки.
 
 Используйте кнопки ниже для навигации! 🚀"""
+    return mesasge
+
+
+def _print_tariff_plan(plan: TariffPlan) -> str:
+    return f"""• <b>{plan.name}</b> - {plan.price}
+{plan.description}"""
 
 
 @dispatcher.message(F.text == "💎 Купить подписку")
 async def buy_subscription(message: Message):
-    from .database_engine import new_session
-    from sqlalchemy import select
-    from .models import TariffPlan
 
     text = """💎 <b>Выберите тарифный план:</b>"""
 
-    with new_session() as session:
-        statement = select(TariffPlan).where(TariffPlan.is_active)
-        plans = session.scalars(statement)
-        for tariff in plans:
-            text += f"""• <b>{tariff.name}</b> - {tariff.price}
-    {tariff.description}"""
+    plans = _get_tariff_plans()
+    for tariff in plans:
+        text += _print_tariff_plan(tariff)
 
     text += "\n\nВыберите подходящий план:"
 
