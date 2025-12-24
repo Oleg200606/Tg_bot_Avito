@@ -47,8 +47,9 @@ class Config:
             raise ValueError("BOT_TOKEN не установлен")
         if not self.DB_PASSWORD:
             raise ValueError("DB_PASSWORD не установлен")
+
     def get_postgres_url(self):
-        url =f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        url = f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         print("DATABASE_URL", url)
         return url
 

@@ -14,12 +14,17 @@ def get_main_menu():
     builder.row(KeyboardButton(text="📞 Поддержка"))
     return builder.as_markup(resize_keyboard=True)
 
+
 from .models import TariffPlan
+
+
 def get_subscription_plans(plans: list[TariffPlan]):
     builder = InlineKeyboardBuilder()
     for plan in plans:
         builder.add(
-            InlineKeyboardButton(text=f"{plan.name} - {plan.price}", callback_data="sub_"+str(plan.id)),
+            InlineKeyboardButton(
+                text=f"{plan.name} - {plan.price}", callback_data="sub_" + str(plan.id)
+            ),
         )
     builder.adjust(1)
     return builder.as_markup()

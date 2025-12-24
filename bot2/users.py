@@ -37,7 +37,9 @@ def create_user(telegram_id: int, username: str, full_name: str) -> User | None:
 def get_or_create_user(telegram_id: int, username: str, full_name: str) -> User:
     usr = get_user_by_telegram_id(telegram_id)
     if not usr:
-        new_user = create_user(telegram_id=telegram_id, username=username, full_name=full_name)
+        new_user = create_user(
+            telegram_id=telegram_id, username=username, full_name=full_name
+        )
         if not new_user:
             raise Exception("failed create new user", telegram_id, username)
         return new_user

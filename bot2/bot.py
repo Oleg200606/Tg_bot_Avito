@@ -18,24 +18,29 @@ def __init__(conf: Config):
         token=conf.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
+
 async def start_polling(conf: Config):
     __init__(conf)
-    await dispatcher.start_polling(bot) # type: ignore
+    await dispatcher.start_polling(bot)  # type: ignore
 
 
 @dispatcher.message(Command("start"))
 async def cmd_start(message: Message):
     if not message.from_user:
         return
-    user = get_or_create_user(message.from_user.id, message.from_user.username or "", message.from_user.full_name)
+    user = get_or_create_user(
+        message.from_user.id,
+        message.from_user.username or "",
+        message.from_user.full_name,
+    )
     if not user:
         await message.answer("Что-то пошло не так")
-    
 
     await message.answer(__welcome_text(message.from_user.username or "неизвестный"))
 
 
-def __welcome_text(username: str): return f"""
+def __welcome_text(username: str):
+    return f"""
 👋 Привет, {username}!
 
 🤖 Я бот для управления подписками с Яндекс Кассой.
@@ -56,6 +61,7 @@ def __welcome_text(username: str): return f"""
 
 Используйте кнопки ниже для навигации! 🚀"""
 
+
 @dispatcher.message(F.text == "💎 Купить подписку")
 async def buy_subscription(message: Message):
     from .database_engine import new_session
@@ -70,7 +76,7 @@ async def buy_subscription(message: Message):
         for tariff in plans:
             text += f"""• <b>{tariff.name}</b> - {tariff.price}
     {tariff.description}"""
-            
+
     text += "\n\nВыберите подходящий план:"
 
     await message.answer(text, reply_markup=get_subscription_plans(list(plans)))

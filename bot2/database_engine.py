@@ -23,5 +23,6 @@ def new_session():
 
 def migrate():
     from .models import User, TariffPlan
-    metadata :MetaData= declarative_base().metadata
+
+    metadata: MetaData = declarative_base().metadata
     metadata.create_all(engine, tables=[User.__table__, TariffPlan.__table__])
