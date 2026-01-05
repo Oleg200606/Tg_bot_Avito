@@ -9,6 +9,8 @@ async def main():
     logger_setup(conf)
     log = get_logger(__name__)
 
+    log.info("Starting application")
+
     create(conf)
 
     await start_polling(conf)
