@@ -1,8 +1,7 @@
-from bot2.keyboards import get_subscription_plans
 from .config import Config
 from aiogram.filters import Command
 from aiogram.types import Message
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from .users import get_or_create_user
@@ -29,7 +28,11 @@ def _get_tariff_plans() -> list[TariffPlan]:
 
 
 async def start_polling(conf: Config):
+    from .routers import subscriptions, targets
+
     __init__(conf)
+    dispatcher.include_router(subscriptions.router)
+    dispatcher.include_router(targets.router)
     await dispatcher.start_polling(bot)  # type: ignore
 
 
@@ -76,17 +79,3 @@ def __welcome_text(username: str, tariff_plans: list[TariffPlan]):
 def _print_tariff_plan(plan: TariffPlan) -> str:
     return f"""• <b>{plan.name}</b> - {plan.price}
 {plan.description}"""
-
-
-@dispatcher.message(F.text == "💎 Купить подписку")
-async def buy_subscription(message: Message):
-
-    text = """💎 <b>Выберите тарифный план:</b>"""
-
-    plans = _get_tariff_plans()
-    for tariff in plans:
-        text += _print_tariff_plan(tariff)
-
-    text += "\n\nВыберите подходящий план:"
-
-    await message.answer(text, reply_markup=get_subscription_plans(list(plans)))
