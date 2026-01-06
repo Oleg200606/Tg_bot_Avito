@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, Engine, MetaData
-from sqlalchemy.orm import Session, declarative_base, DeclarativeBase
+from sqlalchemy.orm import Session, declarative_base
 from .config import Config, DB_ENGINE_POSTGRES, DB_ENGINE_SQLITE
 from .logger import get_logger
 

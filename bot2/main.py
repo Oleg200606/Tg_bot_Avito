@@ -5,7 +5,7 @@ from .bot import start_polling
 
 
 def create_tariffs():
-    from .routers.common import create_tariff_plan, get_tariff_plans
+    from .tariff_plans import create_tariff_plan, get_tariff_plans
 
     if len(get_tariff_plans()) > 0:
         return

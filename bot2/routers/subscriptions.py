@@ -2,7 +2,8 @@ from aiogram import Router, F
 from bot2.keyboards import get_subscription_plans
 from aiogram.types import Message
 
-from .common import format_tariff_plan, get_tariff_plans
+from .common import format_tariff_plan
+from ..tariff_plans import get_tariff_plans
 
 router = Router()
 
