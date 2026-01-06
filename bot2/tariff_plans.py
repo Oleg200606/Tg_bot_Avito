@@ -10,7 +10,7 @@ def get_tariff_plans() -> list[TariffPlan]:
         return list(plans)
 
 
-def create_tariff_plan(name: str, price: int, targets_limit: int, description: str):
+def create_tariff_plan(name: str, price: float, targets_limit: int, description: str):
     if price <= 0:
         raise ValueError("price can't be lower or equal to zero")
     if targets_limit <= 0:
