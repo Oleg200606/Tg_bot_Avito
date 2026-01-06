@@ -40,7 +40,8 @@ def __welcome_text(username: str, tariff_plans: list[TariffPlan]):
 • Просмотр статистики и истории
 • Автоматическое обновление подписок
 
-💎 <b>Тарифные планы:</b>"""
+💎 <b>Тарифные планы:</b>
+"""
     for plan in tariff_plans:
         mesasge += format_tariff_plan(plan)
     mesasge += """

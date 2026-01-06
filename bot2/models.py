@@ -23,6 +23,9 @@ class User(Base):
     targets: Mapped[List["Target"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    subscriptions: Mapped[List["Subscription"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class TariffPlan(Base):
@@ -32,6 +35,9 @@ class TariffPlan(Base):
     targets_limit: Mapped[int] = mapped_column(default=1)
     description: Mapped[str] = mapped_column()
     is_active: Mapped[bool] = mapped_column(default=True)
+    subscriptions: Mapped[List["Subscription"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
 
 
 DEFAULT_TARGET_NAME = "Новая цель"
@@ -49,3 +55,8 @@ class Subscription(Base):
     """Not implemented yet"""
 
     __tablename__ = "subscriptions"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user: Mapped[User] = relationship(back_populates="subscriptions")
+    plan_id: Mapped[int] = mapped_column(ForeignKey("tariff_plans.id"))
+    plan: Mapped[TariffPlan] = relationship(back_populates="subscriptions")
+    valid_until: Mapped[datetime.datetime] = mapped_column()
