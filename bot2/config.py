@@ -1,8 +1,13 @@
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 if not load_dotenv():
     raise Exception("Failed load .env file")
+
+
+DB_ENGINE_POSTGRES = "postgres"
+DB_ENGINE_SQLITE = "sqlite"
 
 
 class Config:
@@ -18,11 +23,13 @@ class Config:
     BOT_USERNAME = os.getenv("BOT_USERNAME", "")
 
     # Database
+    DB_ENGINE = os.getenv("DB_ENGINE", DB_ENGINE_POSTGRES)
     DB_HOST = os.getenv("DB_HOST", "postgres")
     DB_PORT = os.getenv("DB_PORT", "5432")
     DB_NAME = os.getenv("DB_NAME", "avito_bot")
     DB_USER = os.getenv("DB_USER", "postgres")
     DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+    DB_FILE = Path(os.getenv("DB_FILE", "./avito-bot-db.sqlite3")).absolute().name
 
     # YooKassa
     YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID", "")
@@ -45,12 +52,18 @@ class Config:
     def __init__(self) -> None:
         if not self.BOT_TOKEN:
             raise ValueError("BOT_TOKEN не установлен")
-        if not self.DB_PASSWORD:
+
+        if not self.DB_ENGINE in [DB_ENGINE_POSTGRES, DB_ENGINE_SQLITE]:
+            raise ValueError(f"Неизвестная СУБД '{self.DB_ENGINE}'")
+        if self.DB_ENGINE == DB_ENGINE_POSTGRES and not self.DB_PASSWORD:
             raise ValueError("DB_PASSWORD не установлен")
 
     def get_postgres_url(self):
         url = f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        print("DATABASE_URL", url)
+        return url
+
+    def get_sqlite_url(self):
+        url = f"sqlite:///{self.DB_FILE}"
         return url
 
     # VAT codes explanation:

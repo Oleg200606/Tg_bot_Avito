@@ -1,17 +1,15 @@
 from aiogram import Router, F
-from bot2.keyboards import get_subscription_plans
 from aiogram.types import Message
-
 from .common import format_tariff_plan
 from ..tariff_plans import get_tariff_plans
+from bot2.keyboards import get_subscription_plans
 
 router = Router()
 
 
-@router.message(F.text == "💎 Купить подписку")
-async def buy_subscription(message: Message):
-
-    text = """💎 <b>Выберите тарифный план:</b>"""
+@router.message(F.text == "Тарифы")
+async def list_tariffs(message: Message):
+    text = """💎 <b>Выберите тарифный план:</b>\n"""
 
     plans = get_tariff_plans()
     for tariff in plans:
