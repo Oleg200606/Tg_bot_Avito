@@ -1,17 +1,27 @@
 from aiogram.types import KeyboardButton, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from .subscriptions import get_subscription
 
 
-def get_main_menu():
+def get_main_menu(user_id: int):
+    has_subscription = get_subscription(user_id) is not None
+
     builder = ReplyKeyboardBuilder()
+
+    if has_subscription:
+        builder.row(
+            KeyboardButton(text="Moи цели"),
+            KeyboardButton(text="📊 Моя подписка"),
+        )
+        builder.row(KeyboardButton(text="🔗 Добавить цель"))
+    else:
+        builder.row(
+            KeyboardButton(text="💎 Купить подписку"),
+        )
+
     builder.row(
-        KeyboardButton(text="📋 Инструкция"), KeyboardButton(text="🔗 Ввести ссылку")
+        KeyboardButton(text="📋 Инструкция"), KeyboardButton(text="📞 Поддержка")
     )
-    builder.row(
-        KeyboardButton(text="💎 Купить подписку"),
-        KeyboardButton(text="📊 Моя подписка"),
-    )
-    builder.row(KeyboardButton(text="📞 Поддержка"))
     return builder.as_markup(resize_keyboard=True)
 
 

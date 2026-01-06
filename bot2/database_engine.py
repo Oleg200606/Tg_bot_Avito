@@ -32,7 +32,15 @@ def new_session():
 
 
 def migrate():
-    from .models import User, TariffPlan
+    from .models import User, TariffPlan, Target, Subscription
 
     metadata: MetaData = declarative_base().metadata
-    metadata.create_all(engine, tables=[User.__table__, TariffPlan.__table__])
+    metadata.create_all(
+        engine,
+        tables=[
+            User.__table__,
+            TariffPlan.__table__,
+            Target.__table__,
+            Subscription.__table__,
+        ],  # type:ignore
+    )

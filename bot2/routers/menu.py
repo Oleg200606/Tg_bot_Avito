@@ -5,6 +5,7 @@ from ..users import get_or_create_user
 from ..tariff_plans import get_tariff_plans
 from ..models import TariffPlan
 from .common import format_tariff_plan
+from ..keyboards import get_main_menu
 
 router = Router()
 
@@ -22,7 +23,8 @@ async def cmd_start(message: Message):
         await message.answer("Что-то пошло не так")
 
     await message.answer(
-        __welcome_text(message.from_user.username or "неизвестный", get_tariff_plans())
+        __welcome_text(message.from_user.username or "неизвестный", get_tariff_plans()),
+        reply_markup=get_main_menu(message.chat.id),
     )
 
 
