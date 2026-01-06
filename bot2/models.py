@@ -24,6 +24,6 @@ class TariffPlan(Base):
     __tablename__ = "tariff_plans"
     name: Mapped[str] = mapped_column(unique=True)
     price: Mapped[float] = mapped_column(default=100)
-    request_limit: Mapped[int] = mapped_column(default=1)
+    targets_limit: Mapped[int] = mapped_column(default=1)
     description: Mapped[str] = mapped_column()
     is_active: Mapped[bool] = mapped_column(default=True)

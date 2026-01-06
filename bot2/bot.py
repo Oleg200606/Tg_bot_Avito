@@ -28,11 +28,12 @@ def _get_tariff_plans() -> list[TariffPlan]:
 
 
 async def start_polling(conf: Config):
-    from .routers import subscriptions, targets
+    from .routers import subscriptions, targets, tariff_plans
 
     __init__(conf)
-    dispatcher.include_router(subscriptions.router)
-    dispatcher.include_router(targets.router)
+    dispatcher.include_routers(
+        subscriptions.router, targets.router, tariff_plans.router
+    )
     await dispatcher.start_polling(bot)  # type: ignore
 
 
